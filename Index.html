@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 語音即時翻譯監控</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+TC:wght@300;500&display=swap');
+        body { background-color: #020617; font-family: 'Noto+Sans+TC', sans-serif; color: #f8fafc; }
+        .tech-font { font-family: 'Orbitron', sans-serif; }
+        .pulse-red { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.2); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-6">
+
+    <div class="max-w-4xl w-full">
+        <!-- 頂部狀態列 -->
+        <header class="flex justify-between items-center mb-10 glass p-4 rounded-2xl">
+            <div>
+                <h1 class="text-xl font-bold text-sky-400 tech-font">VOICE INTERCEPTOR v1.0</h1>
+                <p class="text-xs text-slate-400">語音偵測及商務語分析系統</p>
+            </div>
+            <div id="status-tag" class="flex items-center space-x-2 text-xs">
+                <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                <span>系統待命</span>
+            </div>
+        </header>
+
+        <!-- 主操作區 -->
+        <div class="grid grid-cols-1 gap-6">
+            
+            <!-- 控制按鈕 -->
+            <button id="mic-btn" class="w-24 h-24 rounded-full bg-sky-500 hover:bg-sky-400 shadow-lg shadow-sky-500/20 mx-auto flex items-center justify-center transition-all active:scale-95 group">
+                <svg id="mic-icon" class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+            </button>
+            <p id="hint-text" class="text-center text-sm text-slate-400 mt-2">點擊麥克風開始監聽對手發言</p>
+
+            <!-- 語音轉文字監控視窗 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                <!-- 對手原始語音內容 -->
+                <div class="glass rounded-xl p-5">
+                    <h2 class="text-xs text-sky-400 font-bold mb-3 tech-font uppercase">Detected Audio (Original)</h2>
+                    <div id="transcript-box" class="h-40 overflow-y-auto text-lg text-slate-300 leading-relaxed">
+                        等待語音輸入...
+                    </div>
+                </div>
+
+                <!-- AI 中文翻譯與語氣 -->
+                <div class="glass rounded-xl p-5 border-l-4 border-emerald-500">
+                    <h2 class="text-xs text-emerald-400 font-bold mb-3 tech-font uppercase">AI Chinese Translation</h2>
+                    <div id="translation-box" class="h-40 overflow-y-auto text-lg text-white font-medium">
+                        ---
+                    </div>
+                </div>
+            </div>
+
+            <!-- 商務意圖分析 -->
+            <div class="glass rounded-xl p-4 mt-2">
+                <div class="flex items-center space-x-2 mb-2">
+                    <span class="text-amber-400 text-xs font-bold tech-font uppercase italic underline">Strategic Analysis</span>
+                </div>
+                <div id="intent-box" class="text-sm text-amber-100 italic">
+                    語音分析尚未啟動。系統將自動識別對手是否在給予壓力、猶豫或提供商務讓步。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. 初始化語音識別 (Web Speech API)
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("您的瀏覽器不支持語音識別，請使用 Google Chrome。");
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true; // 持續監聽
+        recognition.interimResults = true; // 顯示中間結果
+        recognition.lang = 'en-US'; // 初始設為英文，稍後可自動切換或手動選擇
+
+        let isListening = false;
+        const micBtn = document.getElementById('mic-btn');
+        const statusTag = document.getElementById('status-tag');
+        const transcriptBox = document.getElementById('transcript-box');
+        const translationBox = document.getElementById('translation-box');
+        const intentBox = document.getElementById('intent-box');
+
+        // 2. 切換監聽狀態
+        micBtn.onclick = () => {
+            if (!isListening) {
+                recognition.start();
+                isListening = true;
+                updateStatus(true);
+            } else {
+                recognition.stop();
+                isListening = false;
+                updateStatus(false);
+            }
+        };
+
+        function updateStatus(active) {
+            if (active) {
+                statusTag.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 pulse-red"></span><span class="text-red-400">正在監聽...</span>`;
+                micBtn.classList.replace('bg-sky-500', 'bg-red-500');
+            } else {
+                statusTag.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-500"></span><span>系統待命</span>`;
+                micBtn.classList.replace('bg-red-500', 'bg-sky-500');
+            }
+        }
+
+        // 3. 處理語音辨識結果
+        recognition.onresult = (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                    processFinalText(finalTranscript); // 傳送進行翻譯
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            transcriptBox.innerHTML = `<span class="text-white">${finalTranscript}</span><span class="text-slate-500">${interimTranscript}</span>`;
+        };
+
+        // 4. 翻譯邏輯 (串接 Google Translate 或 OpenAI)
+        async function processFinalText(text) {
+            translationBox.innerText = "翻譯中...";
+            
+            // 使用 Google 免費接口作為演示
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-TW&dt=t&q=${encodeURI(text)}`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                const result = data[0].map(item => item[0]).join('');
+                
+                // 行業術語保護
+                const sanitized = result
+                    .replace(/莫克/g, "MOQ")
+                    .replace(/交貨時間/g, "Lead Time")
+                    .replace(/液晶/g, "LCD/TFT");
+
+                translationBox.innerText = sanitized;
+
+                // 語氣分析模擬 (在實際生產環境中，建議傳給 OpenAI API)
+                analyzeTone(text);
+
+            } catch (e) {
+                translationBox.innerText = "翻譯失敗，請檢查網路。";
+            }
+        }
+
+        function analyzeTone(text) {
+            const t = text.toLowerCase();
+            if (t.includes('discount') || t.includes('cheaper') || t.includes('price')) {
+                intentBox.innerText = "🚨 偵測到價格談判意圖：對手正在關注成本，可能在試探底價。";
+            } else if (t.includes('urgent') || t.includes('immediately') || t.includes('delay')) {
+                intentBox.innerText = "⏳ 偵測到時間壓力：對手對交期 (Lead Time) 感到焦慮，我方可作為談判籌碼。";
+            } else {
+                intentBox.innerText = "⚖️ 語氣穩定：標準商務溝通中。";
+            }
+        }
+
+        recognition.onerror = (event) => { console.error("辨識錯誤:", event.error); };
+    </script>
+</body>
+</html>
